@@ -1,2 +1,4 @@
 *.swp
 *~
+/fa-develop
+log.txt

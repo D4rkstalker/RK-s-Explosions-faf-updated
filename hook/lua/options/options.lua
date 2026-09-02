@@ -5,12 +5,12 @@ local newVideoSettings = {
         type = 'toggle',
         default = 4,
         update = function(control,value)
-            logic = import('/lua/options/optionsLogic.lua')
+            local logic = import('/lua/options/optionsLogic.lua')
             
-            aaoptions = GetAntiAliasingOptions()
+            local aaoptions = GetAntiAliasingOptions()
 
-            aamax = 0
-            aamed = 0
+            local aahigh = 0
+            local aamed = 0
             if 0 < table.getn(aaoptions) then
                 aahigh = aaoptions[table.getn(aaoptions)]
                 aamed = aaoptions[math.ceil(table.getn(aaoptions)/2)]
@@ -94,9 +94,9 @@ local newVideoSettings = {
 }
 
 for _, newItem in newVideoSettings do
-    for k, item in options.video.items do
+    for index, item in options.video.items do
         if item.key == newItem.key then
-            k = newItem
+            options.video.items[index] = newItem
             break
         end
     end

@@ -1,8 +1,3 @@
---TODO: Remove when the new game patch gets released, where the Army is saved
-local oldEntity = Entity
-Entity = Class(oldEntity) {
-    OnCreate = function(self, spec)
-        oldEntity.OnCreate(self, spec)
-        self.Army = self:GetArmy()
-    end,
-}
+-- Unit and projectile classes in current FAF cache their army during creation.
+-- Keeping the old global Entity wrapper would add an OnCreate call to every
+-- simulation entity for a compatibility workaround that is no longer needed.

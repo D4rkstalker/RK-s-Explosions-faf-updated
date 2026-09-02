@@ -1,22 +1,10 @@
 local SDEffectTemplate = import('/mods/rks_explosions/lua/SDEffectTemplates.lua')
 local NEffectTemplate = import('/mods/rks_explosions/lua/NEffectTemplates.lua')
 local DefaultExplosions = import('/lua/defaultexplosions.lua')
-local DefaultExplosionsStock = import('/lua/defaultexplosions.lua')
-local Entity = import('/lua/sim/entity.lua').Entity
 local EffectTemplate = import('/lua/EffectTemplates.lua')
 local util = import('/lua/utilities.lua')
 local GetRandomFloat = util.GetRandomFloat
 local GetRandomInt = util.GetRandomInt
-local GetRandomOffset = util.GetRandomOffset
-local GetRandomOffset2 = util.GetRandomOffset2
-local EfctUtil = import('/lua/EffectUtilities.lua')
-local CreateEffects = EfctUtil.CreateEffects
-local CreateEffectsWithOffset = EfctUtil.CreateEffectsWithOffset
-local CreateEffectsWithRandomOffset = EfctUtil.CreateEffectsWithRandomOffset
-local CreateBoneEffects = EfctUtil.CreateBoneEffects
-local CreateBoneEffectsOffset = EfctUtil.CreateBoneEffectsOffset
-local CreateRandomEffects = EfctUtil.CreateRandomEffects
-local ScaleEmittersParam = EfctUtil.ScaleEmittersParam
 
 local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
 
@@ -150,10 +138,10 @@ function _CreateScalableUnitExplosion(obj)
     end
     ----LOG(Number)
     -- Create Light particle flash
-    DefaultExplosionsStock.CreateFlash( obj, -1, 0, army )
+    DefaultExplosions.CreateFlash( obj, -1, 0, army )
 
     -- Create GenericDebris chunks
-    -- DefaultExplosionsStock.CreateDebrisProjectiles( obj, obj.Spec.BoundingXYZRadius, obj.Spec.Dimensions )    No debris for now, need to improve the look of them first.
+    -- DefaultExplosions.CreateDebrisProjectiles( obj, obj.Spec.BoundingXYZRadius, obj.Spec.Dimensions )    No debris for now, need to improve the look of them first.
     -- Camera Shake  (.radius .maxshake .minshake .lifetime)
     if toggle == 1 then
         obj:ShakeCamera(0, 0, 0, 0 )
@@ -161,27 +149,4 @@ function _CreateScalableUnitExplosion(obj)
         obj:ShakeCamera(30 * scale, scale * ShakeMaxMul, 0, 0.5 + ShakeTimeModifier)
     end
     obj:Destroy()
-end
-
-function CreateDebrisProjectiles(obj, volume, dimensions)
-    local partamounts = (math.min(GetRandomInt(1 + (volume * 50), (volume * 100)) , 250) /2.15)
-    local sx, sy, sz = unpack(dimensions)
-    local vector = obj.Spec.OverKillRatio.debris_Vector
-    for i = 1, partamounts do
-        local xpos, xpos, zpos = GetRandomOffset(sx, sy, sz, 1)
-        local xdir,ydir,zdir = GetRandomOffset(sx, sy, sz, 10)
-        if vector then
-            xdir = (vector[1] * 5) + GetRandomOffset2(sx, sy, sz, 3)
-            ydir = math.abs((vector[2] * 5 )) + GetRandomOffset(sx, sy, sz, 3)
-            zdir = (vector[3] * 5) + GetRandomOffset2(sx, sy, sz, 1)
-        end
-
-        local rand = 4
-        if volume < 0.2 then
-            rand = 9
-        elseif volume > 2 then
-            rand = 10
-        end
-        obj:CreateProjectile('/effects/entities/DebrisMisc0' .. rand .. '/DebrisMisc0' .. rand .. '_proj.bp',xpos,xpos,zpos,xdir,ydir + 4.5,zdir)
-    end
 end

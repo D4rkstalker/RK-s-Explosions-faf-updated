@@ -4,10 +4,37 @@ local BoomSoundBP = import('/mods/rks_explosions/boomsounds/BoomSounds.bp')
 local NEffectTemplate = import('/mods/rks_explosions/lua/NEffectTemplates.lua')
 local SDExplosions = import('/mods/rks_explosions/lua/SDExplosions.lua')
 local Util = import('/lua/utilities.lua')
+local EffectUtil = import('/lua/effectutilities.lua')
+local EffectTemplate = import('/lua/effecttemplates.lua')
+local explosion = import('/lua/defaultexplosions.lua')
 local GlobalExplosionScaleValueMain = 1
 local GlobalExplosionScaleValue = 1 * GlobalExplosionScaleValueMain
 
 local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
+
+-- Capture the current FAF classes before replacing the exports below. Modern
+-- FAF splits these classes into separate modules, and rebuilding their
+-- inheritance graph here causes ambiguous states and fields.
+local oldAircraftCarrier = AircraftCarrier
+local oldFactoryUnit = FactoryUnit
+local oldAirFactoryUnit = AirFactoryUnit
+local oldAirStagingPlatformUnit = AirStagingPlatformUnit
+local oldConcreteStructureUnit = ConcreteStructureUnit
+local oldEnergyCreationUnit = EnergyCreationUnit
+local oldEnergyStorageUnit = EnergyStorageUnit
+local oldLandFactoryUnit = LandFactoryUnit
+local oldMassCollectionUnit = MassCollectionUnit
+local oldMassFabricationUnit = MassFabricationUnit
+local oldMassStorageUnit = MassStorageUnit
+local oldRadarUnit = RadarUnit
+local oldRadarJammerUnit = RadarJammerUnit
+local oldSonarUnit = SonarUnit
+local oldSeaFactoryUnit = SeaFactoryUnit
+local oldShieldStructureUnit = ShieldStructureUnit
+local oldTransportBeaconUnit = TransportBeaconUnit
+local oldWallStructureUnit = WallStructureUnit
+local oldQuantumGateUnit = QuantumGateUnit
+local oldExternalFactoryUnit = ExternalFactoryUnit
 
 local AirTechLevelMultiplierTbl = {
     ['TECH1'] = 0.665,
@@ -17,7 +44,7 @@ local AirTechLevelMultiplierTbl = {
 }
 
 local oldAirUnit = AirUnit
-AirUnit = Class(oldAirUnit) {
+AirUnit = ClassUnit(oldAirUnit) {
 
     GetDebrisNum = function(self, UnitTechLvl)
         if (UnitTechLvl == 'TECH1') then
@@ -82,7 +109,7 @@ AirUnit = Class(oldAirUnit) {
 }
 
 local oldLandUnit = LandUnit
-LandUnit = Class(oldLandUnit) {
+LandUnit = ClassUnit(oldLandUnit) {
     OnCreate = function(self)
         oldLandUnit.OnCreate(self)
 
@@ -98,7 +125,7 @@ LandUnit = Class(oldLandUnit) {
 }
 
 local oldWalkingLandUnit = WalkingLandUnit
-WalkingLandUnit = Class(oldWalkingLandUnit) {
+WalkingLandUnit = ClassUnit(oldWalkingLandUnit) {
     OnCreate = function(self)
         oldWalkingLandUnit.OnCreate(self)
 
@@ -120,7 +147,7 @@ local ShipTechLevelMultiplierTbl = { -- Multiplier based on tech level, used for
     ['EXPERIMENTAL'] = 3,
 }
 local oldSeaUnit = SeaUnit
-SeaUnit = Class(oldSeaUnit) {
+SeaUnit = ClassUnit(oldSeaUnit) {
 
     PlaySubBoomSound = function(self, sound) -- Plays boom sound on small booms for added realism
         local bp = BoomSoundBP.Audio
@@ -133,7 +160,7 @@ SeaUnit = Class(oldSeaUnit) {
     
     GetSizeOfUnit = function(self) -- Get size of unit
         local bp = self:GetBlueprint()
-        return (math.abs(bp.SizeX or 0 + bp.SizeY or 0 + bp.SizeZ or 0))
+        return math.abs((bp.SizeX or 0) + (bp.SizeY or 0) + (bp.SizeZ or 0))
     end,
     
     IsBoneAboveWater = function(self, boneName) --Check if bone is underwater
@@ -146,7 +173,10 @@ SeaUnit = Class(oldSeaUnit) {
 
     GetSizeOfUnitForSubBooms = function(self)
         local bp = self:GetBlueprint()
-        return (math.abs((bp.SizeX)*(bp.SizeX)) or 0 + ((bp.SizeY)*(bp.SizeY)) or 0 + ((bp.SizeZ)*(bp.SizeZ)) or 0) --For bigger difference between big and small units
+        local sizeX = bp.SizeX or 0
+        local sizeY = bp.SizeY or 0
+        local sizeZ = bp.SizeZ or 0
+        return math.abs(sizeX * sizeX + sizeY * sizeY + sizeZ * sizeZ) --For bigger difference between big and small units
     end,
 
     GetSubBoomExplCount = function(self, UnitTechLvl) -- Gives amount of small booms as ships are sinking
@@ -375,10 +405,9 @@ SeaUnit = Class(oldSeaUnit) {
 
         if (layer == 'Water' or layer == 'Seabed' or layer == 'Sub') then
             self.SinkExplosionThread = self:ForkThread(self.ExplosionThread)
-            self.SinkThread = self:ForkThread(self.SinkingThread)
         end
 
-        MobileUnit.OnKilled(self, instigator, type, overkillRatio)
+        oldSeaUnit.OnKilled(self, instigator, type, overkillRatio)
     end,
 
     ExplosionThread = function(self) 
@@ -443,87 +472,33 @@ SeaUnit = Class(oldSeaUnit) {
         end
     end,
 
-   SinkingThread = function(self) -- Well i guess we need to sink too, while exploding... fine with me! :D
-        local i = 8 -- Initializing the above surface counter
-        local vol = self:GetUnitVolume()
-        local TempestModifier = self.TempestModifier(self) 
-
-        WaitSeconds(3)
-        while true do
-            if i > 0 then
-                local rx, ry, rz = self:GetRandomOffset(1)
-                local rs = Random(vol/2, vol*2) / (vol*2) *TempestModifier
-                CreateAttachedEmitter(self,-1,self.Army,'/effects/emitters/destruction_water_sinking_ripples_01_emit.bp'):OffsetEmitter(rx, 0, rz):ScaleEmitter(rs)
-
-                local rx, ry, rz = self:GetRandomOffset(1)
-                CreateAttachedEmitter(self,self.LeftFrontWakeBone,self.Army, '/effects/emitters/destruction_water_sinking_wash_01_emit.bp'):OffsetEmitter(rx, 0, rz):ScaleEmitter(rs)
-
-                local rx, ry, rz = self:GetRandomOffset(1)
-                CreateAttachedEmitter(self,self.RightFrontWakeBone,self.Army, '/effects/emitters/destruction_water_sinking_wash_01_emit.bp'):OffsetEmitter(rx, 0, rz):ScaleEmitter(rs)
-            end
-            local rx, ry, rz = self:GetRandomOffset(1)
-            local rs = Random(vol/2, vol*2) / (vol*2) *TempestModifier
-            CreateAttachedEmitter(self,-1,self.Army,'/effects/emitters/destruction_underwater_sinking_wash_01_emit.bp'):OffsetEmitter(rx, 0, rz):ScaleEmitter(rs)
-
-            i = i - 1
-            WaitSeconds(2)
-        end
-    end,
 }
 
-AircraftCarrier = Class(SeaUnit, BaseTransport) {
-
-    DisableIntelOfCargo = true,
-
-    ---@param self AircraftCarrier
-    ---@param attachBone Bone
-    ---@param unit Unit
-    OnTransportAttach = function(self, attachBone, unit)
-        SeaUnit.OnTransportAttach(self, attachBone, unit)
-        BaseTransport.OnTransportAttach(self, attachBone, unit)
-    end,
-
-    ---@param self AircraftCarrier
-    ---@param attachBone Bone
-    ---@param unit Unit
-    OnTransportDetach = function(self, attachBone, unit)
-        SeaUnit.OnTransportDetach(self, attachBone, unit)
-        BaseTransport.OnTransportDetach(self, attachBone, unit)
-    end,
-
-    OnAttachedKilled = function(self, attached)
-        SeaUnit.OnAttachedKilled(self, attached)
-        BaseTransport.OnAttachedKilled(self, attached)
-    end,
-
-    ---@param self AircraftCarrier
-    OnStartTransportLoading = function(self)
-        SeaUnit.OnStartTransportLoading(self)
-        BaseTransport.OnStartTransportLoading(self)
-    end,
-
-    ---@param self AircraftCarrier
-    OnStopTransportLoading = function(self)
-        SeaUnit.OnStopTransportLoading(self)
-        BaseTransport.OnStopTransportLoading(self)
-    end,
-
-    ---@param self AircraftCarrier
-    DestroyedOnTransport = function(self)
-        -- SeaUnit.DestroyedOnTransport(self)
-        BaseTransport.DestroyedOnTransport(self)
-    end,
-
-
-    OnKilled = function(self, instigator, type, overkillRatio)
-        self:SaveCargoMass()
-        SeaUnit.OnKilled(self, instigator, type, overkillRatio)
-        self:DetachCargo()
-    end,
+AircraftCarrier = ClassUnit(oldAircraftCarrier) {
+    -- Keep FAF's current transport implementation and layer the naval
+    -- explosion behavior onto it. Reconstructing SeaUnit + BaseTransport here
+    -- produces ambiguous IdleState definitions in the current class system.
+    PlaySubBoomSound = SeaUnit.PlaySubBoomSound,
+    GetSizeOfUnit = SeaUnit.GetSizeOfUnit,
+    IsBoneAboveWater = SeaUnit.IsBoneAboveWater,
+    GetSizeOfUnitForSubBooms = SeaUnit.GetSizeOfUnitForSubBooms,
+    GetSubBoomExplCount = SeaUnit.GetSubBoomExplCount,
+    GetSubBoomTimingNumber = SeaUnit.GetSubBoomTimingNumber,
+    GetSubBoomScaleNumber = SeaUnit.GetSubBoomScaleNumber,
+    DebrisNumEqualizer = SeaUnit.DebrisNumEqualizer,
+    GetMaxDebrisNum = SeaUnit.GetMaxDebrisNum,
+    GetDebrisVelocity = SeaUnit.GetDebrisVelocity,
+    TempestModifier = SeaUnit.TempestModifier,
+    EXPScaleModifierForBooms = SeaUnit.EXPScaleModifierForBooms,
+    CreateFactionalExplosionAtBone = SeaUnit.CreateFactionalExplosionAtBone,
+    CreateFactionalFinalExplosionAtBone = SeaUnit.CreateFactionalFinalExplosionAtBone,
+    OnCreate = SeaUnit.OnCreate,
+    OnKilled = SeaUnit.OnKilled,
+    ExplosionThread = SeaUnit.ExplosionThread,
 }
 
 local oldSubUnit = SubUnit
-SubUnit = Class(oldSubUnit) {
+SubUnit = ClassUnit(oldSubUnit) {
     TempestModifier = function(self) --Adjusts oil slick for Tempest
         if EntityCategoryContains(categories.AEON, self) and EntityCategoryContains(categories.EXPERIMENTAL, self) then
             return 0.20
@@ -565,7 +540,6 @@ SubUnit = Class(oldSubUnit) {
             end
         end
         self.SinkExplosionThread = self:ForkThread(self.ExplosionThread)
-        self.SinkThread = self:ForkThread(self.SinkingThread)
 
         oldSubUnit.OnKilled(self, instigator, type, overkillRatio)
     end,
@@ -677,7 +651,7 @@ StructureHelperfunctions = Class() {
     -- Get total size of unit
     GetSizeOfBuilding = function(self)
         local bp = self:GetBlueprint()
-        return (math.abs(bp.SizeX or 0 + bp.SizeY or 0 + bp.SizeZ or 0))
+        return math.abs((bp.SizeX or 0) + (bp.SizeY or 0) + (bp.SizeZ or 0))
     end,
 
     -- For speeding up Seraphim building explosions, they call the destruction thread twice, so I'm halving the number of explosions.
@@ -702,7 +676,7 @@ StructureHelperfunctions = Class() {
 
     -- For final boom final scale tweaking, for cyb
     GetFinalBoomMultBasedOffFactionCyb = function(self)
-        if self.factionCategory == 'CYBRAN' and self.TechLevel == 'TECH3' and self:GetBlueprint().Categories == 'FACTORY' then
+        if self.factionCategory == 'CYBRAN' and self.TechLevel == 'TECH3' and self:GetBlueprint().CategoriesHash.FACTORY then
             return 1
         else
             return 0.8
@@ -780,7 +754,20 @@ StructureHelperfunctions = Class() {
 }
 
 local oldStructureUnit = StructureUnit
-StructureUnit = Class(StructureHelperfunctions, oldStructureUnit) {
+StructureUnit = ClassUnit(oldStructureUnit) {
+
+    GetNumberByTechLvlBuilding = StructureHelperfunctions.GetNumberByTechLvlBuilding,
+    GetNumberByTechLvlBuilding2 = StructureHelperfunctions.GetNumberByTechLvlBuilding2,
+    GetNumberTechFinalBoom = StructureHelperfunctions.GetNumberTechFinalBoom,
+    GetSizeOfBuilding = StructureHelperfunctions.GetSizeOfBuilding,
+    GetNumberBasedOffFaction = StructureHelperfunctions.GetNumberBasedOffFaction,
+    GetFinalBoomMultBasedOffFaction = StructureHelperfunctions.GetFinalBoomMultBasedOffFaction,
+    GetFinalBoomMultBasedOffFactionCyb = StructureHelperfunctions.GetFinalBoomMultBasedOffFactionCyb,
+    GetFinalBoomMultBasedOffFactionCybT1Fac = StructureHelperfunctions.GetFinalBoomMultBasedOffFactionCybT1Fac,
+    GetMultTechLvl = StructureHelperfunctions.GetMultTechLvl,
+    CreateTimedFactionalStuctureUnitExplosions = StructureHelperfunctions.CreateTimedFactionalStuctureUnitExplosions,
+    CreateFactionalHitExplosionOffset = StructureHelperfunctions.CreateFactionalHitExplosionOffset,
+    CreateFactionalExplosionAtBone = StructureHelperfunctions.CreateFactionalExplosionAtBone,
 
     --overrides definition in Unit.lua
      GetUnitSizes = function(self)
@@ -847,72 +834,49 @@ StructureUnit = Class(StructureHelperfunctions, oldStructureUnit) {
 
 }
 
-local oldFactoryUnit = FactoryUnit
-FactoryUnit = Class(StructureUnit, oldFactoryUnit) {}
+-- Apply the structure explosion methods without changing each FAF class's
+-- original inheritance graph. This retains current factory states and fields
+-- while avoiding ambiguous multiple-base definitions such as
+-- ConsumptionActive.
+local function ApplyStructureExplosionOverrides(base)
+    return ClassUnit(base) {
+        GetNumberByTechLvlBuilding = StructureUnit.GetNumberByTechLvlBuilding,
+        GetNumberByTechLvlBuilding2 = StructureUnit.GetNumberByTechLvlBuilding2,
+        GetNumberTechFinalBoom = StructureUnit.GetNumberTechFinalBoom,
+        GetSizeOfBuilding = StructureUnit.GetSizeOfBuilding,
+        GetNumberBasedOffFaction = StructureUnit.GetNumberBasedOffFaction,
+        GetFinalBoomMultBasedOffFaction = StructureUnit.GetFinalBoomMultBasedOffFaction,
+        GetFinalBoomMultBasedOffFactionCyb = StructureUnit.GetFinalBoomMultBasedOffFactionCyb,
+        GetFinalBoomMultBasedOffFactionCybT1Fac = StructureUnit.GetFinalBoomMultBasedOffFactionCybT1Fac,
+        GetMultTechLvl = StructureUnit.GetMultTechLvl,
+        CreateTimedFactionalStuctureUnitExplosions = StructureUnit.CreateTimedFactionalStuctureUnitExplosions,
+        CreateFactionalHitExplosionOffset = StructureUnit.CreateFactionalHitExplosionOffset,
+        CreateFactionalExplosionAtBone = StructureUnit.CreateFactionalExplosionAtBone,
+        GetUnitSizes = StructureUnit.GetUnitSizes,
+        CreateDestructionEffects = StructureUnit.CreateDestructionEffects,
+    }
+end
 
--- AIR FACTORY UNITS
-AirFactoryUnit = Class(FactoryUnit) {}
+FactoryUnit = ApplyStructureExplosionOverrides(oldFactoryUnit)
+AirFactoryUnit = ApplyStructureExplosionOverrides(oldAirFactoryUnit)
+AirStagingPlatformUnit = ApplyStructureExplosionOverrides(oldAirStagingPlatformUnit)
+ConcreteStructureUnit = ApplyStructureExplosionOverrides(oldConcreteStructureUnit)
+EnergyCreationUnit = ApplyStructureExplosionOverrides(oldEnergyCreationUnit)
+EnergyStorageUnit = ApplyStructureExplosionOverrides(oldEnergyStorageUnit)
+LandFactoryUnit = ApplyStructureExplosionOverrides(oldLandFactoryUnit)
+MassCollectionUnit = ApplyStructureExplosionOverrides(oldMassCollectionUnit)
+MassFabricationUnit = ApplyStructureExplosionOverrides(oldMassFabricationUnit)
+MassStorageUnit = ApplyStructureExplosionOverrides(oldMassStorageUnit)
+RadarUnit = ApplyStructureExplosionOverrides(oldRadarUnit)
+RadarJammerUnit = ApplyStructureExplosionOverrides(oldRadarJammerUnit)
+SonarUnit = ApplyStructureExplosionOverrides(oldSonarUnit)
+SeaFactoryUnit = ApplyStructureExplosionOverrides(oldSeaFactoryUnit)
+ShieldStructureUnit = ApplyStructureExplosionOverrides(oldShieldStructureUnit)
+TransportBeaconUnit = ApplyStructureExplosionOverrides(oldTransportBeaconUnit)
+WallStructureUnit = ApplyStructureExplosionOverrides(oldWallStructureUnit)
+QuantumGateUnit = ApplyStructureExplosionOverrides(oldQuantumGateUnit)
 
--- AIR STAGING PLATFORMS UNITS
-local oldAirStagingPlatformUnit = AirStagingPlatformUnit
-AirStagingPlatformUnit = Class(StructureUnit, oldAirStagingPlatformUnit) {}
-
--- ENERGY CREATION UNITS
-local oldConcreteStructureUnit = ConcreteStructureUnit
-ConcreteStructureUnit = Class(StructureUnit, oldConcreteStructureUnit) {}
-
--- ENERGY CREATION UNITS
-local oldEnergyCreationUnit = EnergyCreationUnit
-EnergyCreationUnit = Class(StructureUnit, oldEnergyCreationUnit) {}
-
--- ENERGY STORAGE UNITS
-local oldEnergyStorageUnit = EnergyStorageUnit
-EnergyStorageUnit = Class(StructureUnit, oldEnergyStorageUnit) {}
-
--- LAND FACTORY UNITS
-LandFactoryUnit = Class(FactoryUnit) {}
-
--- MASS COLLECTION UNITS
-local oldMassCollectionUnit = MassCollectionUnit
-MassCollectionUnit = Class(StructureUnit, oldMassCollectionUnit) {}
-
--- MASS FABRICATION UNITS
-local oldMassFabricationUnit = MassFabricationUnit
-MassFabricationUnit = Class(StructureUnit, oldMassFabricationUnit) {}
-
---  MASS STORAGE UNITS
-local oldMassStorageUnit = MassStorageUnit
-MassStorageUnit = Class(StructureUnit, oldMassStorageUnit) {}
-
---  RADAR UNITS
-local oldRadarUnit = RadarUnit
-RadarUnit = Class(StructureUnit, oldRadarUnit) {}
-
--- RADAR JAMMER UNITS
-local oldRadarJammerUnit = RadarJammerUnit
-RadarJammerUnit = Class(StructureUnit, oldRadarJammerUnit) {}
-
--- SONAR UNITS
-local oldSonarUnit = SonarUnit
-SonarUnit = Class(StructureUnit, oldSonarUnit) {}
-
--- SEA FACTORY UNITS
-local oldSeaFactoryUnit = SeaFactoryUnit
-SeaFactoryUnit = Class(FactoryUnit, oldSeaFactoryUnit) {}
-
--- SHIELD STRCUTURE UNITS
-local oldShieldStructureUnit = ShieldStructureUnit
-ShieldStructureUnit = Class(StructureUnit, oldShieldStructureUnit) {}
-
--- TRANSPORT BEACON UNITS
-local oldTransportBeaconUnit = TransportBeaconUnit
-TransportBeaconUnit = Class(StructureUnit, oldTransportBeaconUnit) {}
-
--- WALL STRCUTURE UNITS
-local oldWallStructureUnit = WallStructureUnit
-WallStructureUnit = Class(StructureUnit, oldWallStructureUnit) {}
-
--- QUANTUM GATE UNITS
-local oldQuantumGateUnit = QuantumGateUnit
-QuantumGateUnit = Class(FactoryUnit, oldQuantumGateUnit) {}
+if oldExternalFactoryUnit then
+    ExternalFactoryUnit = ApplyStructureExplosionOverrides(oldExternalFactoryUnit)
+end
 

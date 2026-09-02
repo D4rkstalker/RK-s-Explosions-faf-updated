@@ -4,7 +4,7 @@ local SinglePolyTrailProjectile = DefaultProjectileFile.SinglePolyTrailProjectil
 local MultiCompositeEmitterProjectile = DefaultProjectileFile.MultiCompositeEmitterProjectile
 
 -- Restorer AA Missile explosion
-AZealot02AAMissileProjectile = Class(SinglePolyTrailProjectile) {
+AZealot02AAMissileProjectile = ClassProjectile(SinglePolyTrailProjectile) {
     PolyTrail = '/effects/emitters/aeon_missile_trail_03_emit.bp',
 
     FxImpactUnit = SDEffectTemplate.AeonRestorerMissileHit01,

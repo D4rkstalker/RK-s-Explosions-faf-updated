@@ -4,10 +4,10 @@
 -- It is also neccesary because the changes here remove the current generic
 -- explosion, since it's replaced by the factional ones.
 
-local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
-local SDModifiedExplosion = import('/mods/rks_explosions/hook/lua/defaultexplosions.lua')
+local SDModifiedExplosion = import('/lua/defaultexplosions.lua')
 local SDExplosions = import('/mods/rks_explosions/lua/SDExplosions.lua')
 local SDEffectTemplate = import('/mods/rks_explosions/lua/SDEffectTemplates.lua')
+local Utilities = import('/lua/utilities.lua')
 
 local TechLevelMultiplierTbl = {
     ['TECH1'] = 0.425,
@@ -16,13 +16,26 @@ local TechLevelMultiplierTbl = {
     -- 1
 }
 
-local oldUnit = Unit
-Unit = Class(oldUnit) {
-    RKEmitters = {},
+local oldUnitOnCreate = Unit.OnCreate
+local oldUnitOnKilled = Unit.OnKilled
+local oldUnitManageDamageEffects = Unit.ManageDamageEffects
+local oldUnitOnStopBeingBuilt = Unit.OnStopBeingBuilt
 
-    OnCreate = function (self)
-        oldUnit.OnCreate(self)
-        
+Unit.OnCreate = function (self)
+        oldUnitOnCreate(self)
+
+        local blueprint = self.Blueprint or self:GetBlueprint()
+
+        -- FAF no longer keeps these legacy fields on every Unit instance. The
+        -- explosion code still uses them extensively, so initialise them from
+        -- the blueprint instead of relying on the compatibility shim.
+        self.factionCategory = blueprint.FactionCategory
+        self.techCategory = blueprint.TechCategory
+
+        -- Emitters belong to one unit. A class-level table causes every unit to
+        -- share the same list and lets one aircraft impact modify other units.
+        self.RKEmitters = {}
+
         -- Save commonly used variables
         self.TechLevelMultiplier = TechLevelMultiplierTbl[self.techCategory] or 1
 
@@ -43,36 +56,36 @@ Unit = Class(oldUnit) {
             self.FxDamage2 = {SDFactionalSmallFire} -- 50% HP
             self.FxDamage3 = {SDFactionalBigFireSmoke} -- 25% HP
         end
-    end,
+    end
 
-    CreateEffects = function(self, EffectTable, army, scale)
-        for k, v in EffectTable do
+Unit.CreateEffects = function(self, EffectTable, army, scale)
+        for _, v in EffectTable or {} do
             local emitter = CreateAttachedEmitter(self, -1, army, v):ScaleEmitter(scale)
             table.insert(self.RKEmitters, emitter)
             self.Trash:Add(emitter)
         end
-    end,
+    end
 
-    GetUnitVolume = function(self)
+Unit.GetUnitVolume = function(self)
         local x, y, z = self:GetUnitSizes()
         return x * y * z
-    end,
+    end
 
-    CreateDestructionEffects = function(self, overKillRatio)
+Unit.CreateDestructionEffects = function(self, overKillRatio)
         SDModifiedExplosion.CreateScalableUnitExplosion(self, overKillRatio)
-    end,
+    end
 
-    OnKilled = function(self, instigator, type, overkillRatio)
+Unit.OnKilled = function(self, instigator, type, overkillRatio)
         if EntityCategoryContains(categories.AIR, self) then
             self:ForkThread(SDExplosions.ExplosionAirImpact)
         else
             self:ForkThread(SDExplosions.ExplosionLand)
         end
 
-        oldUnit.OnKilled(self, instigator, type, overkillRatio) 
-    end,
+        oldUnitOnKilled(self, instigator, type, overkillRatio)
+    end
 
-    SinkDestructionEffects = function(self)
+Unit.SinkDestructionEffects = function(self)
         local vol = self:GetUnitVolume()
         local numBones = self:GetBoneCount() - 1
         local pos = self:GetPosition()
@@ -80,13 +93,13 @@ Unit = Class(oldUnit) {
         local i = 0
 
         while i < 1 do
-            local randBone = utilities.GetRandomInt(0, numBones)
+            local randBone = Utilities.GetRandomInt(0, numBones)
             local boneHeight = self:GetPosition(randBone)[2]
             local toSurface = surfaceHeight - boneHeight
             local y = toSurface
             local rx, ry, rz = self:GetRandomOffset(0.3)
             local rs = math.max(math.min(2.5, vol / 20), 0.5)
-            local scale = utilities.GetRandomFloat(rs/2, rs)
+            local scale = Utilities.GetRandomFloat(rs/2, rs)
 
             self:DestroyAllDamageEffects()
             if toSurface < 1 then
@@ -97,7 +110,7 @@ Unit = Class(oldUnit) {
             if toSurface < 0 then
                 --explosion.CreateDefaultHitExplosionAtBone(self, randBone, scale*1.5)
             else
-                local lifetime = utilities.GetRandomInt(50, 200)
+                local lifetime = Utilities.GetRandomInt(50, 200)
 
                 if(toSurface > 1) then
                     CreateEmitterAtBone(self, randBone, self.Army, '/effects/emitters/underwater_bubbles_01_emit.bp'):OffsetEmitter(rx, ry, rz)
@@ -109,36 +122,37 @@ Unit = Class(oldUnit) {
                 CreateEmitterAtBone(self, randBone, self.Army, '/effects/emitters/destruction_underwater_explosion_flash_01_emit.bp'):OffsetEmitter(rx, ry, rz):ScaleEmitter(scale)
                 CreateEmitterAtBone(self, randBone, self.Army, '/effects/emitters/destruction_underwater_explosion_splash_01_emit.bp'):OffsetEmitter(rx, ry, rz):ScaleEmitter(scale)
             end
-            local rd = utilities.GetRandomFloat(0.4, 1.0)
+            local rd = Utilities.GetRandomFloat(0.4, 1.0)
             WaitSeconds(i + rd)
             i = i + 0.3
         end
-    end,
+    end
 
-    -- Disable damage effects on unfinished units
-    ManageDamageEffects = function(self, newHealth, oldHealth)
+-- Disable damage effects on unfinished units
+Unit.ManageDamageEffects = function(self, newHealth, oldHealth)
         if not self.isFinishedUnit then return end
 
-        oldUnit.ManageDamageEffects(self, newHealth, oldHealth)
-    end,
+        oldUnitManageDamageEffects(self, newHealth, oldHealth)
+    end
 
-    -- Because there are no damaged effects on unfinished buildings, we have to set them up when the unit is completed.
-    OnStopBeingBuilt = function(self, builder, layer)
-        if not oldUnit.OnStopBeingBuilt(self, builder, layer) then
+-- Because there are no damaged effects on unfinished buildings, we have to set them up when the unit is completed.
+Unit.OnStopBeingBuilt = function(self, builder, layer)
+        local completed = oldUnitOnStopBeingBuilt(self, builder, layer)
+        if completed == false then
             return false
-        else
-            -- The effects are spawned in 3 stages, 75%, 50%, 25% and then removed one by one as the unit heals.
-            local healthRatio =  self:GetHealth() / self:GetMaxHealth()
-            if healthRatio < 0.75 then
-                self:ManageDamageEffects(0.75, 1)
-            end
-            if healthRatio < 0.5 then
-                self:ManageDamageEffects(0.5, 0.75)
-            end
-            if healthRatio < 0.25 then
-                self:ManageDamageEffects(0.25, 0.5)
-            end
-            return true
         end
-    end,
-}
+
+        -- The effects are spawned in 3 stages, 75%, 50%, 25% and then removed one by one as the unit heals.
+        local healthRatio = self:GetHealth() / self:GetMaxHealth()
+        if healthRatio < 0.75 then
+            self:ManageDamageEffects(0.75, 1)
+        end
+        if healthRatio < 0.5 then
+            self:ManageDamageEffects(0.5, 0.75)
+        end
+        if healthRatio < 0.25 then
+            self:ManageDamageEffects(0.25, 0.5)
+        end
+
+        return completed
+    end
