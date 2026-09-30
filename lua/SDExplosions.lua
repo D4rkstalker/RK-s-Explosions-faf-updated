@@ -5,7 +5,7 @@
 --#**
 --#**  Summary  : Explosions used by Supreme Destruction/RK's Explosions
 --#**
---#**  Copyright © 2011 RK Powered Games, Inc.  All rights reserved.
+--#**  Copyright ï¿½ 2011 RK Powered Games, Inc.  All rights reserved.
 --#****************************************************************************
 local EffectTemplate = import('/lua/EffectTemplates.lua')
 local Util = import('/lua/utilities.lua')
@@ -31,6 +31,7 @@ local GlobalExplosionScaleValue = 1 * GlobalExplosionScaleValueMain
 LOG('      Global Explosion Scale:     ', GlobalExplosionScaleValue)
 
 local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
+local damage_toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').damage_toggle
 
 function GetEffectTemplateFile(toggle)
     if toggle == 1 then
@@ -43,12 +44,12 @@ end
 ----------------------------------------NECCESARY STUFF----------------------------------------
 function GetAverageBoundingXZRadius(unit)
     local bp = unit:GetBlueprint()
-    return ((bp.SizeX or 0 + bp.SizeZ or 0) * 0.5)
+    return ((bp.SizeX or 1 + bp.SizeZ or 1) * 0.5)
 end
 
 function GetAverageBoundingXYZRadius(unit)
     local bp = unit:GetBlueprint()
-    return ((bp.SizeX or 0 + bp.SizeY or 0 + bp.SizeZ or 0) * 0.333)
+    return ((bp.SizeX or 1 + bp.SizeY or 1 + bp.SizeZ or 1) * 0.333)
 end
 
 function QuatFromRotation(rotation, x, y, z)
@@ -152,9 +153,14 @@ function ExplosionAirMidAir(obj)
     if toggle == 1 then
         obj.CreateEffects(obj, SDExplosion, obj.Army, (obj.TechLevelMultiplier/1.95*GlobalExplosionScaleValue)) -- Custom explosion when unit is in the air
         obj.CreateEffects(obj, SDFallDownTrail, obj.Army, (obj.TechLevelMultiplier*GlobalExplosionScaleValue/1.85)) -- Custom falling-down trail
+        
     else
         obj.CreateEffects(obj, NExplosion, obj.Army, (obj.TechLevelMultiplier/1.95*GlobalExplosionScaleValue)) -- Default explosion when unit is in the air
         obj.CreateEffects(obj, NFallDownTrail, obj.Army, (obj.TechLevelMultiplier*GlobalExplosionScaleValue)) -- No falling-down trail
+    end
+
+    if damage_toggle == 1 then
+	    DamageArea(obj, obj:GetPosition(), GetAverageBoundingXZRadius(obj) * GlobalExplosionScaleValue, (obj:GetUnitVolume() + obj.TechLevelMultiplier * 10 )*obj.TechLevelMultiplier * 5 * GlobalExplosionScaleValue, 'normal', true)
     end
 
     if obj.TechLevel == 'TECH1' then
@@ -181,6 +187,10 @@ function ExplosionAirImpact(obj)
     else
         obj.CreateEffects(obj, NExplosionImpact, obj.Army, 1) --Default explosion when unit is in the air
     end
+    if damage_toggle == 1 then
+	    DamageArea(obj, obj:GetPosition(), GetAverageBoundingXZRadius(obj) * GlobalExplosionScaleValue, (obj:GetUnitVolume() + obj.TechLevelMultiplier * 10 )*obj.TechLevelMultiplier * 5 * GlobalExplosionScaleValue, 'normal', true)
+    end
+
             
     if obj.TechLevel == 'TECH1' then
         CreateFlash(obj, -1, (obj.TechLevelMultiplier)/2.5/2.5*2, obj.Army)
@@ -214,6 +224,9 @@ function AirImpactWater(obj)
     else 
         obj.CreateEffects(obj, NEffectTemplate.OilSlick, obj.Army, 0.3*obj.TechLevelMultiplier*(GetRandomInt(0.7, 1.5)))
     end
+    if damage_toggle == 1 then
+	    DamageArea(obj, obj:GetPosition(), GetAverageBoundingXZRadius(obj) * GlobalExplosionScaleValue, (obj:GetUnitVolume() + obj.TechLevelMultiplier * 10 )*obj.TechLevelMultiplier * 5 * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function ExplosionLand(obj)
@@ -236,6 +249,9 @@ function ExplosionLand(obj)
         end
     end
 
+    if damage_toggle == 1 then
+	    DamageArea(obj, obj:GetPosition(), GetAverageBoundingXZRadius(obj) * GlobalExplosionScaleValue, (obj:GetUnitVolume() + obj.TechLevelMultiplier * 10 )*obj.TechLevelMultiplier * 5 * GlobalExplosionScaleValue, 'normal', true)
+    end
     CreateFlash(obj, -1, obj.TechLevelMultiplier/1.65/1.3, obj.Army) 
 
     if toggle == 1 then
@@ -439,10 +455,16 @@ end
 function CreateShipFlamingDebrisProjectiles(obj, volume, dimensions)
     local partamounts = (math.min(GetRandomInt(1 + (volume * 50), (volume * 100)) ,250)) / 10
     local sx, sy, sz = unpack(dimensions)
-    local vector = obj.Spec.OverKillRatio.debris_Vector
+    local vector = obj.DebrisVector
+    local spec = obj.Spec
+    if not vector and spec and type(spec.OverKillRatio) == 'table' then
+        vector = spec.OverKillRatio.debris_Vector
+    end
+
+    local factionCategory = obj.factionCategory or obj.Blueprint.FactionCategory
 
     for i = 1, partamounts do
-        local xpos, xpos, zpos = GetRandomOffset(sx, sy, sz, 1)
+        local xpos, ypos, zpos = GetRandomOffset(sx, sy, sz, 1)
         local xdir,ydir,zdir = GetRandomOffset(sx, sy, sz, 3)
         if vector then
             xdir = (vector[1] * 5) + 0 -- + GetRandomOffset2(sx, sy, sz, 3)
@@ -450,23 +472,16 @@ function CreateShipFlamingDebrisProjectiles(obj, volume, dimensions)
             zdir = (vector[3] * 5) + 0 -- + GetRandomOffset2(sx, sy, sz, 1)
         end
 
-        local rand = 4
-        if volume < 0.2 then
-            rand = 9
-        elseif volume > 2 then
-            rand = 10
-        end
-
-        if obj.factionCategory == 'UEF' then
-            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingUEF/DebrisFlamingUEF_proj.bp',xpos,xpos,zpos,xdir,ydir,zdir)
-        elseif obj.factionCategory == 'CYBRAN' then
-            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingCybran/DebrisFlamingCybran_proj.bp',xpos,xpos,zpos,xdir,ydir,zdir)
-        elseif obj.factionCategory == 'AEON' then
-            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingAeon/DebrisFlamingAeon_proj.bp',xpos,xpos,zpos,xdir,ydir,zdir)
-        elseif obj.factionCategory == 'SERAPHIM' then
-            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingSeraphim/DebrisFlamingSeraphim_proj.bp',xpos,xpos,zpos,xdir,ydir,zdir)
-        elseif obj.factionCategory == 'NOMADS' then
-            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingNomads/DebrisFlamingNomads_proj.bp',xpos,xpos,zpos,xdir,ydir,zdir)
+        if factionCategory == 'UEF' then
+            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingUEF/DebrisFlamingUEF_proj.bp',xpos,ypos,zpos,xdir,ydir,zdir)
+        elseif factionCategory == 'CYBRAN' then
+            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingCybran/DebrisFlamingCybran_proj.bp',xpos,ypos,zpos,xdir,ydir,zdir)
+        elseif factionCategory == 'AEON' then
+            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingAeon/DebrisFlamingAeon_proj.bp',xpos,ypos,zpos,xdir,ydir,zdir)
+        elseif factionCategory == 'SERAPHIM' then
+            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingSeraphim/DebrisFlamingSeraphim_proj.bp',xpos,ypos,zpos,xdir,ydir,zdir)
+        elseif factionCategory == 'NOMADS' then
+            obj:CreateProjectile('/mods/rks_explosions/effects/entities/DebrisFlamingNomads/DebrisFlamingNomads_proj.bp',xpos,ypos,zpos,xdir,ydir,zdir)
         end
     end
 end
@@ -524,6 +539,9 @@ end
 function CreateGenericFlashExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).AddNothing)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 
@@ -533,6 +551,9 @@ end
 function CreateFactionalExplosionAtBone(obj, boneName, scale, EXPLOSION)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, EXPLOSION)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 -----------------------------------------------------
@@ -541,34 +562,52 @@ end
 function CreateUEFSmallHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionSmallSD)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateUEFMediumHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionMediumSD)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateUEFLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionLargeShortDurSmoke)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
     -- CreateBoneEffects(obj, boneName, obj.Army, EffectTemplate.ExplosionEffectsLrg02)
 end
 
 function CreateUEFLargeShortDurSmokeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionLargeShortDurSmoke)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
     -- CreateBoneEffects(obj, boneName, obj.Army, EffectTemplate.ExplosionEffectsLrg02)
 end
 
 function CreateUEFVeryLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionVeryLarge)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
     -- CreateBoneEffects(obj, boneName, obj.Army, EffectTemplate.ExplosionEffectsLrg02)
 end
 
 function CreateUEFVeryLargeShortDurSmokeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionVeryLargeShortDurSmoke)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
     -- CreateBoneEffects(obj, boneName, obj.Army, EffectTemplate.ExplosionEffectsLrg02)
 end
 
@@ -578,26 +617,41 @@ end
 function CreateCybranSmallHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.2, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPSmallCybran) -- :ScaleEmitter(1)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateCybranMediumHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.3, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPMediumCybran) -- :ScaleEmitter(2.5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateCybranLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.35, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeCybran) -- :ScaleEmitter(5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateCybranVeryLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPMediumCybran) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateCybranFinalLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPFinalLargeCybran) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 ------------------------------------------------------
@@ -606,35 +660,56 @@ end
 function CreateAeonSmallHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPSmallAeon) -- :ScaleEmitter(1)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateAeonMediumHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPMediumAeon) -- :ScaleEmitter(2.5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateAeonLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeAeon) -- :ScaleEmitter(5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 function CreateAeonLargeInitialHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeInitialAeon) -- :ScaleEmitter(5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateAeonVeryLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeAeon) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateGCFinalLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPGCFinalAeon) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateAeonFinalLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPVeryLargeAeon) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 ------------------------------------------------------
@@ -643,24 +718,39 @@ end
 function CreateSeraSmallHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPMediumSera) -- :ScaleEmitter(1)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateSeraMediumHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPMediumSera) -- :ScaleEmitter(2.5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateSeraLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeSera) -- :ScaleEmitter(5)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateSeraVeryLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeSera) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end
 
 function CreateSeraFinalLargeHitExplosionAtBone(obj, boneName, scale)
     CreateFlash(obj, boneName, scale * 0.5, obj.Army)
     CreateBoneEffects(obj, boneName, obj.Army, GetEffectTemplateFile(toggle).ExplosionEXPLargeSera) -- :ScaleEmitter(10)
+    if damage_toggle == 1 then
+        DamageArea(obj, obj:GetPosition(boneName), scale * GlobalExplosionScaleValue, scale * GlobalExplosionScaleValue, 'normal', true)
+    end
 end

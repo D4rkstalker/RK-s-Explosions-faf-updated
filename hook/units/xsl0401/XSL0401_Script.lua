@@ -1,8 +1,20 @@
 ------------------------------------
 -- Seraphim Experimental Assault Bot
 ------------------------------------
-local RKExplosion = import('/mods/rks_explosions/lua/SDExplosions.lua')
 local explosion = import('/lua/defaultexplosions.lua')
+local RKEffectUtil = import('/mods/rks_explosions/lua/RKEffectUtilities.lua')
+local RKExplosion = import('/mods/rks_explosions/lua/SDExplosions.lua')
+local Util = import('/lua/Utilities.lua')
+local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
+local SDEffectTemplate = import('/mods/rks_explosions/lua/SDEffectTemplates.lua')
+local NEffectTemplate = import('/mods/rks_explosions/lua/NEffectTemplates.lua')
+function GetEffectTemplateFile(toggle)
+    if toggle == 1 then
+        return SDEffectTemplate
+    else 
+        return NEffectTemplate
+    end
+end
 
 local oldXSL0401 = XSL0401
 XSL0401 = Class(oldXSL0401) {    
@@ -16,6 +28,14 @@ XSL0401 = Class(oldXSL0401) {
                                         
         RKExplosion.CreateSeraMediumHitExplosionAtBone(self, bigExplosionBones[Random(1,3)], 1.0)
         explosion.CreateDebrisProjectiles(self, explosion.GetAverageBoundingXYZRadius(self), {self:GetUnitSizes()})           
+        RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'Torso', self.Army, GetEffectTemplateFile(toggle).Ahwassa_Engine_Critical_Explosion_Flashes, 4.20/2, 'EngineFail1' ) 
+        RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'Torso', self.Army, GetEffectTemplateFile(toggle).Ahwassa_Engine_Critical_Explosion_Sparks, 1.20/2, 'EngineFail1' )
+        RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'Torso', self.Army, GetEffectTemplateFile(toggle).Ahwassa_Engine_Critical_Smoke, 15.115/6, 'EngineFail1' )       
+        RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'Torso', self.Army, GetEffectTemplateFile(toggle).Ahwassa_Engine_Critical_Breach, 2, 'EngineFail2' ) 
+        RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'Torso', self.Army, GetEffectTemplateFile(toggle).Ahwassa_Engine_Critical_Breach_Electricity, 1, 'EngineFail2' ) 
+
+        -- LOG(repr(self:GetVelocity()))
+        RKExplosion.CreateInheritedVelocityDebrisProjectiles(self, 50, {self:GetVelocity()}, 17, 1, 100, ('/mods/rks_explosions/effects/entities/Ahwassa_Debris/Ahwassa_Debris_proj.bp'))
         WaitSeconds(2)
 
         local RandBoneIter = RandomIter(explosionBones)
@@ -68,6 +88,11 @@ XSL0401 = Class(oldXSL0401) {
     end,
 
     OnDestroy = function(self)
+        RKExplosion.CreateFactionalExplosionAtBone( self, 'Torso', 3.5, GetEffectTemplateFile(toggle).Ahwassa_Impact_Explosion )
+        CreateLightParticle(self, -1, self.Army, 10*2, 30*2, 'glow_02', 'ramp_quantum_warhead_flash_01')
+        RKExplosion.CreateFlashLong( self, -1, 5.5, self.Army, 3 )
+        local NumberForShake = (Util.GetRandomFloat( 1.5, 1.5 + 1 ) )/3.5
+        self:ShakeCamera( 30 * NumberForShake*8.5, NumberForShake*8.5, 0, NumberForShake*9.15 / 1.375)
         RKExplosion.CreateScorchMarkDecalRKSExpSera(self, 17, self.Army)
         oldXSL0401.OnDestroy(self)
     end,

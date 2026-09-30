@@ -1,7 +1,7 @@
-name = "RK's Explosions"       
-uid = "90312bd2-6fbd-4aa6-874e-rksbooms-v13"
-version = 13
-description = "Replaces the default unit explosion effects with factionally varied and higher quality equivalents."
+name = "RK's Explosions FAF 2026"       
+uid = "90312bd2-6fbd-4aa6-874e-rksbooms-v15FAF"
+version = 15
+description = "Replaces the default unit explosion effects with factionally varied and higher quality equivalents. FAF update Sep 2026"
 author = "RK4000, speed2, Sheeo, Domino"
 url = "http://forums.faforever.com/viewtopic.php?f=41&t=6813"
 selectable = true

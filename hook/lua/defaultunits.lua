@@ -11,6 +11,7 @@ local GlobalExplosionScaleValueMain = 1
 local GlobalExplosionScaleValue = 1 * GlobalExplosionScaleValueMain
 
 local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
+local damage_toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').damage_toggle
 
 -- Capture the current FAF classes before replacing the exports below. Modern
 -- FAF splits these classes into separate modules, and rebuilding their
@@ -323,6 +324,10 @@ SeaUnit = ClassUnit(oldSeaUnit) {
                 self:PlaySubBoomSound('SubBoomSoundUW'..self.factionCategory)
             end
         end
+        if damage_toggle == 1 then
+            DamageArea(self, self:GetPosition(boneName), RandomScaleForSubBooms * GlobalExplosionScaleValue, RandomScaleForSubBooms * GlobalExplosionScaleValue, 'normal', true)
+        end
+
     end,
 
     CreateFactionalFinalExplosionAtBone = function(self, boneName, scale)
@@ -369,6 +374,9 @@ SeaUnit = ClassUnit(oldSeaUnit) {
                 self:PlaySubBoomSound('DeathBoomSoundUW'..self.factionCategory)
 			end
 		end
+        if damage_toggle == 1 then
+            DamageArea(self, self:GetPosition(boneName), RandomScaleForSubBooms * GlobalExplosionScaleValue, RandomScaleForSubBooms * GlobalExplosionScaleValue, 'normal', true)
+        end
 	end,
 
     -- Make sure we use factional damage effects
@@ -657,7 +665,7 @@ StructureHelperfunctions = Class() {
     -- For speeding up Seraphim building explosions, they call the destruction thread twice, so I'm halving the number of explosions.
     GetNumberBasedOffFaction = function(self)
         if self.factionCategory == 'SERAPHIM' then
-            return 0.65
+            return 0.85
         else
             return 0.65
         end
@@ -665,22 +673,16 @@ StructureHelperfunctions = Class() {
 
     -- For final boom semi-final scale tweaking, based off faction
     GetFinalBoomMultBasedOffFaction = function(self)
-        if self.factionCategory == 'SERAPHIM' then
-            return 1.25
-        elseif self.factionCategory == 'CYBRAN' then
-            return 1.425
-        else
+
             return 1
-        end
+
     end,
 
     -- For final boom final scale tweaking, for cyb
     GetFinalBoomMultBasedOffFactionCyb = function(self)
-        if self.factionCategory == 'CYBRAN' and self.TechLevel == 'TECH3' and self:GetBlueprint().CategoriesHash.FACTORY then
-            return 1
-        else
-            return 0.8
-        end
+
+        return 0.8
+
     end,
 
     -- For final boom final scale tweaking, for cyb
@@ -784,7 +786,7 @@ StructureUnit = ClassUnit(oldStructureUnit) {
         local BoomScale2 = self:GetNumberByTechLvlBuilding(self.TechLevel or 'TECH1')
         local BuildingSize = self:GetSizeOfBuilding()
         local NumberForShake = (Util.GetRandomFloat(Number, Number + 1))/0.5/2.5
-        local FinalBoomMultiplier = (self:GetSizeOfBuilding()*self:GetNumberTechFinalBoom()*self:GetFinalBoomMultBasedOffFaction()*self:GetFinalBoomMultBasedOffFaction()*self:GetFinalBoomMultBasedOffFactionCybT1Fac()*self:GetFinalBoomMultBasedOffFactionCyb())
+        local FinalBoomMultiplier = (self:GetSizeOfBuilding()*self:GetNumberTechFinalBoom()*self:GetFinalBoomMultBasedOffFaction()*self:GetFinalBoomMultBasedOffFaction()*self:GetFinalBoomMultBasedOffFactionCybT1Fac())
 
         local GlobalBuildingBoomScaleDivider = 7.5
 
@@ -814,7 +816,7 @@ StructureUnit = ClassUnit(oldStructureUnit) {
             self:ShakeCamera(30 * NumberForShake, NumberForShake, 0, NumberForShake / 1.775)
             
             if toggle == 1 then
-                RKEffectUtil.CreateScaledBoneEffectsOffset(self, -1, self.Army, SDExplosion, 0, 0.75, 0, ((((BoomScale*BoomScale2/2) /GlobalBuildingBoomScaleDivider)*GlobalExplosionScaleValue)*FinalBoomMultiplier))
+                RKEffectUtil.CreateScaledBoneEffectsOffset(self, -1, self.Army, SDExplosion, 0, 0.75, 0, ((((BoomScale*BoomScale2/2) /GlobalBuildingBoomScaleDivider)*GlobalExplosionScaleValue)*FinalBoomMultiplier)/Number)
             else
                 RKEffectUtil.CreateScaledBoneEffectsOffset(self, -1, self.Army, NExplosion, 0, 0.75, 0, ((((BoomScale*BoomScale2/2) /GlobalBuildingBoomScaleDivider)*GlobalExplosionScaleValue)*FinalBoomMultiplier)*2)
             end

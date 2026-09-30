@@ -36,7 +36,7 @@ URA0401 = Class(oldURA0401) {
 
             RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'URA0401', self.Army, GetEffectTemplateFile(toggle).SoulRipper_Ambient_Electricity_Upper, 0.60/2, 'HullDamage') 
             RKEffectUtil.CreateBoneEffectsAttachedWithBag(self, 'URA0401', self.Army, GetEffectTemplateFile(toggle).SoulRipper_Fall_Down_Smoke, 1, 'FallDown1')
-            
+            self:ForkThread(self.ExplodingThreadFn, self.OverKillRatio)
             self:ForkThread(self.DeathThreadFn)
         end
         oldURA0401.OnKilled(self, instigator, type, overkillRatio)
@@ -50,7 +50,7 @@ URA0401 = Class(oldURA0401) {
             self:PlayUnitSound('SubBooms')
         end
 
-        WaitSeconds(6.25/1.5)
+        WaitSeconds(0.5)
         -- First series of booms
         for i = 1, 8, 1 do
             DoSubBoom(2.5, GetEffectTemplateFile(toggle).SoulRipper_First_Series_Booms)
@@ -115,7 +115,7 @@ URA0401 = Class(oldURA0401) {
         else
             -- This is a bit of safety to keep us from calling the death thread twice in case we bounce twice quickly
             if not self.DeathBounce then
-                self:ForkThread(self.ExplodingThreadFn, self.OverKillRatio)
+                --self:ForkThread(self.ExplodingThreadFn, self.OverKillRatio)
                 --self:ForkThread(self.DeathThread, self.OverKillRatio)
                 self.DeathBounce = 1
             end

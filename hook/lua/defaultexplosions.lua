@@ -8,11 +8,12 @@ local GetRandomInt = util.GetRandomInt
 
 local toggle = import('/mods/rks_explosions/lua/Togglestuff.lua').toggle
 
+
 function CreateScalableUnitExplosion(unit, overKillRatio)
     if unit then
         if IsUnit(unit) then
             local explosionEntity = DefaultExplosions.CreateUnitExplosionEntity(unit, overKillRatio)
-            ForkThread(_CreateScalableUnitExplosion, explosionEntity)
+            --ForkThread(_CreateScalableUnitExplosion, explosionEntity, unit)
         end
     end
 end
@@ -26,7 +27,7 @@ function CreateEffectsScalable(obj, army, EffectTable, scale)
 end
 
 function CreateScorchMarkDecalRKS(obj, scale, army)
-    CreateDecal(obj:GetPosition(),GetRandomFloat(0, 2*math.pi),ScorchDecalTextures[GetRandomInt(1,table.getn(ScorchDecalTextures))], '', 'Albedo', scale *3, scale *3, GetRandomFloat(200*4,350*4), GetRandomFloat(300,600), army)
+    CreateDecal(obj:GetPosition(),GetRandomFloat(0, 2*math.pi),ScorchDecalTextures[GetRandomInt(1,table.getn(ScorchDecalTextures))], '', 'Albedo', scale , scale , GetRandomFloat(200*4,350*4), GetRandomFloat(300,600), army)
 end
 
 ScorchDecalTextures = {
@@ -42,9 +43,9 @@ ScorchDecalTextures = {
     'scorch_010_albedo',
 }
 
-function _CreateScalableUnitExplosion(obj)
+function _CreateScalableUnitExplosion(obj, unit)
     local army = obj.Spec.Army
-    local scale = (obj.Spec.BoundingXYZRadius) / 0.3333
+    local scale = obj.Spec.BoundingXYZRadius
     local scalefornavy = scale *0.333
     local layer = obj.Spec.Layer
     local BaseEffectTable = {}
@@ -54,9 +55,9 @@ function _CreateScalableUnitExplosion(obj)
     local ShakeMaxMul = 1
     local Number = (scale - 0.2) *1.4
     local Numberfornavy = (scalefornavy - 0.2) *1.4
-
+    
     -- Determine effect table to use, based on unit bounding box scale
-    -- LOG(scale)
+
     if layer == 'Land' then
         if scale < 1.1 then   -- Small units
             if toggle == 1 then
@@ -149,4 +150,6 @@ function _CreateScalableUnitExplosion(obj)
         obj:ShakeCamera(30 * scale, scale * ShakeMaxMul, 0, 0.5 + ShakeTimeModifier)
     end
     obj:Destroy()
+
+
 end

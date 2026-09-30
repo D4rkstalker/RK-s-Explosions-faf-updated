@@ -46,16 +46,15 @@ Unit.OnCreate = function (self)
             self.TechLevel = 'TECH1'
         end
         
-        if EntityCategoryContains(categories.STRUCTURE, self) then
-            local SDFactionalSmallSmoke = SDEffectTemplate['LightStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
-            local SDFactionalSmallFire = SDEffectTemplate['MediumStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
-            local SDFactionalBigFireSmoke = SDEffectTemplate['HeavyStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
+        local SDFactionalSmallSmoke = SDEffectTemplate['LightStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
+        local SDFactionalSmallFire = SDEffectTemplate['MediumStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
+        local SDFactionalBigFireSmoke = SDEffectTemplate['HeavyStructureUnitDmg'.. self.TechLevel ..self.factionCategory]
 
-            -- Structure unit factional-specific damage effects and smoke
-            self.FxDamage1 = {SDFactionalSmallSmoke} -- 75% HP
-            self.FxDamage2 = {SDFactionalSmallFire} -- 50% HP
-            self.FxDamage3 = {SDFactionalBigFireSmoke} -- 25% HP
-        end
+        -- Structure unit factional-specific damage effects and smoke
+        self.FxDamage1 = {SDFactionalSmallSmoke} -- 75% HP
+        self.FxDamage2 = {SDFactionalSmallFire} -- 50% HP
+        self.FxDamage3 = {SDFactionalBigFireSmoke} -- 25% HP
+
     end
 
 Unit.CreateEffects = function(self, EffectTable, army, scale)
